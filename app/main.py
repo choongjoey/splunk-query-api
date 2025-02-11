@@ -2,6 +2,7 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 import requests
 import os
+import time
 
 class SearchRequest(BaseModel):
     search_term: str
@@ -13,12 +14,16 @@ SPLUNK_HOST = os.environ.get('SPLUNK_HOST')
 SPLUNK_TOKEN = os.environ.get('SPLUNK_TOKEN')
 
 API_URL = f"{SPLUNK_HOST}/services/search/jobs?output_mode=json"
+STATUS_API_URL = f"{SPLUNK_HOST}/services/search/jobs/{{sid}}?output_mode=json"
 RESULTS_API_URL = f"{SPLUNK_HOST}/services/search/jobs/{{sid}}/results?output_mode=json"
 
 HEADERS = {
     "Authorization": SPLUNK_TOKEN,
     "Content-Type": "application/x-www-form-urlencoded"
 }
+
+MAX_RETRIES = 15  # Maximum number of status check retries
+RETRY_DELAY = 1  # Delay (in seconds) between retries
 
 @app.post("/search")
 def trigger_search(request: SearchRequest):
@@ -43,6 +48,20 @@ def trigger_search(request: SearchRequest):
 
             print(f"Search job created with SID: {sid}")
 
+            # Poll for search job status
+            for _ in range(MAX_RETRIES):
+                status_response = requests.get(STATUS_API_URL.format(sid=sid), headers=HEADERS, verify=False)
+                if status_response.status_code == 200:
+                    status_data = status_response.json()
+                    dispatch_state = status_data.get("entry", [{}])[0].get("content", {}).get("dispatchState", "")
+                    print(f"Search job status: {dispatch_state}")
+                    
+                    if dispatch_state == "DONE":
+                        break
+                time.sleep(RETRY_DELAY)
+            else:
+                raise HTTPException(status_code=408, detail="Search job did not complete in time")
+            
             results_response = requests.get(RESULTS_API_URL.format(sid=sid), headers=HEADERS, verify=False)
 
             if results_response.status_code == 200:
