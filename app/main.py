@@ -44,7 +44,13 @@ def trigger_search(request: SearchRequest):
             print(f"Search job created with SID: {sid}")
 
             results_response = requests.get(RESULTS_API_URL.format(sid=sid), headers=HEADERS, verify=False)
-            return results_response.json()
+
+            if results_response.status_code == 200:
+                print(f"Success retrieving {sid}, returning results")
+                return results_response.json()
+            else:
+                print(f"Not successful retrieving {sid}, returning error: {results_response.status_code}")
+                raise HTTPException(status_code=results_response.status_code, detail=results_response.json())
         
         raise HTTPException(status_code=response.status_code, detail=response_data)
     except Exception as e:
