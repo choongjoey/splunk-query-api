@@ -22,7 +22,7 @@ HEADERS = {
     "Content-Type": "application/x-www-form-urlencoded"
 }
 
-MAX_RETRIES = 15  # Maximum number of status check retries
+MAX_RETRIES = 30  # Maximum number of status check retries
 RETRY_DELAY = 1  # Delay (in seconds) between retries
 
 @app.post("/search")
@@ -58,7 +58,9 @@ def trigger_search(request: SearchRequest):
                     
                     if dispatch_state == "DONE":
                         break
-                time.sleep(RETRY_DELAY)
+                retryDelaySeconds = RETRY_DELAY * _;
+                print(f"Retrying in {retryDelaySeconds} seconds")
+                time.sleep(retryDelaySeconds)
             else:
                 raise HTTPException(status_code=408, detail="Search job did not complete in time")
             
